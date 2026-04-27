@@ -1,24 +1,30 @@
-const express = require("express");
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const app = express();
-app.use(express.json());
-
-// ===== CONFIG =====
 const MONGO_URI = "mongodb+srv://hafizharayanputra_db_user:Disain2012%21@hrayyan.ed0acqj.mongodb.net/smart_locker";
 
+let isConnected = false;
+
+// CONNECT MONGO (biar nggak reconnect terus)
+async function connectDB() {
+  if (!isConnected) {
+    await mongoose.connect(MONGO_URI);
+    isConnected = true;
+    console.log("✅ MongoDB CONNECTED");
+  }
+}
+
 // ===== SCHEMA =====
-const User = mongoose.model("User", {
+const User = mongoose.models.User || mongoose.model("User", {
   uid: String,
   nama: String
 });
 
-const Barang = mongoose.model("Barang", {
+const Barang = mongoose.models.Barang || mongoose.model("Barang", {
   kode: String,
   nama: String
 });
 
-const Log = mongoose.model("Log", {
+const Log = mongoose.models.Log || mongoose.model("Log", {
   uid: String,
   nama: String,
   barang: String,
@@ -31,126 +37,92 @@ const Log = mongoose.model("Log", {
   }
 });
 
-// ===== ROUTES =====
+// ===== HANDLER =====
+export default async function handler(req, res) {
+  await connectDB();
 
-// ROOT
-app.get("/", (req, res) => {
-  res.send("🚀 API SMART LOCKER AKTIF");
-});
+  const { url, method } = req;
 
-// SEED USERS
-app.get("/seed-users", async (req, res) => {
   try {
-    await User.deleteMany();
+    // ROOT
+    if (url === "/api" || url === "/api/") {
+      return res.status(200).send("🚀 API SMART LOCKER VERCEL");
+    }
 
-    await User.insertMany([
-      { uid: "4112233", nama: "Hafizh" },
-      { uid: "9988776", nama: "Budi" },
-      { uid: "1122334", nama: "Andi" }
-    ]);
+    // ===== USERS =====
+    if (url.startsWith("/api/users")) {
+      if (method === "GET") {
+        const data = await User.find();
+        return res.status(200).json(data);
+      }
+    }
 
-    res.send("✅ Users masuk");
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err.message);
-  }
-});
+    // ===== BARANG =====
+    if (url.startsWith("/api/barang")) {
+      if (method === "GET") {
+        const data = await Barang.find();
+        return res.status(200).json(data);
+      }
+    }
 
-// SEED BARANG
-app.get("/seed-barang", async (req, res) => {
-  try {
-    await Barang.deleteMany();
+    // ===== LOGS =====
+    if (url.startsWith("/api/logs")) {
+      if (method === "GET") {
+        const data = await Log.find().sort({ waktu: -1 });
+        return res.status(200).json(data);
+      }
 
-    await Barang.insertMany([
-      { kode: "B001", nama: "Laptop" },
-      { kode: "B002", nama: "Proyektor" },
-      { kode: "B003", nama: "Buku" }
-    ]);
+      if (method === "POST") {
+        const { uid, nama, barang, mode, hari } = req.body;
 
-    res.send("✅ Barang masuk");
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err.message);
-  }
-});
+        const durasi = Math.min(hari || 1, 3);
 
-// GET USERS
-app.get("/users", async (req, res) => {
-  try {
-    const data = await User.find();
-    res.json(data);
-  } catch (err) {
-    console.log("ERROR USERS:", err);
-    res.status(500).send(err.message);
-  }
-});
+        const now = new Date();
+        const deadline = new Date();
+        deadline.setDate(now.getDate() + durasi);
 
-// GET BARANG
-app.get("/barang", async (req, res) => {
-  try {
-    const data = await Barang.find();
-    res.json(data);
-  } catch (err) {
-    console.log("ERROR BARANG:", err);
-    res.status(500).send(err.message);
-  }
-});
+        const log = await Log.create({
+          uid,
+          nama,
+          barang,
+          mode,
+          hari: durasi,
+          deadline: deadline.toISOString()
+        });
 
-// GET LOGS
-app.get("/logs", async (req, res) => {
-  try {
-    const data = await Log.find().sort({ waktu: -1 });
-    res.json(data);
-  } catch (err) {
-    console.log("ERROR LOGS:", err);
-    res.status(500).send(err.message);
-  }
-});
+        return res.status(200).json(log);
+      }
+    }
 
-// POST LOG (PINJAM / BALIK)
-app.post("/logs", async (req, res) => {
-  try {
-    const { uid, nama, barang, mode, hari } = req.body;
+    // ===== SEED USERS =====
+    if (url.startsWith("/api/seed-users")) {
+      await User.deleteMany();
 
-    const durasi = Math.min(hari || 1, 3);
+      await User.insertMany([
+        { uid: "4112233", nama: "Hafizh" },
+        { uid: "9988776", nama: "Budi" }
+      ]);
 
-    const now = new Date();
-    const deadline = new Date();
-    deadline.setDate(now.getDate() + durasi);
+      return res.status(200).send("Users OK");
+    }
 
-    const log = await Log.create({
-      uid,
-      nama,
-      barang,
-      mode,
-      hari: durasi,
-      deadline: deadline.toISOString()
-    });
+    // ===== SEED BARANG =====
+    if (url.startsWith("/api/seed-barang")) {
+      await Barang.deleteMany();
 
-    res.json(log);
-  } catch (err) {
-    console.log("ERROR POST:", err);
-    res.status(500).send(err.message);
-  }
-});
+      await Barang.insertMany([
+        { kode: "B001", nama: "Laptop" },
+        { kode: "B002", nama: "Proyektor" }
+      ]);
 
-// ===== START SERVER (FIX PENTING) =====
-const startServer = async () => {
-  try {
-    await mongoose.connect(MONGO_URI);
+      return res.status(200).send("Barang OK");
+    }
 
-    console.log("✅ MongoDB CONNECTED");
-    console.log("📂 DB:", mongoose.connection.name);
-
-    const PORT = process.env.PORT || 3000;
-
-    app.listen(PORT, () => {
-      console.log("🌐 Server jalan di port", PORT);
-    });
+    // DEFAULT
+    return res.status(404).send("Not Found");
 
   } catch (err) {
-    console.log("❌ GAGAL CONNECT:", err);
+    console.log("❌ ERROR:", err);
+    return res.status(500).send(err.message);
   }
-};
-
-startServer();
+}
