@@ -44,7 +44,7 @@ app.get("/users", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.log("ERROR GET USERS:", err);
-    res.status(500).send("ERROR");
+    res.status(500).send("ERRORrrrr");
   }
 });
 
