@@ -4,82 +4,138 @@ const mongoose = require("mongoose");
 const app = express();
 app.use(express.json());
 
-// ===== MONGODB CONNECT =====
-// ⚠️ password sudah di-encode (%21)
+// ===== CONFIG =====
 const MONGO_URI = "mongodb+srv://hafizharayanputra_db_user:Disain2012%21@hrayyan.ed0acqj.mongodb.net/smart_locker";
 
+// ===== CONNECT =====
 mongoose.connect(MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB CONNECTED");
-    console.log("📂 DB NAME:", mongoose.connection.name);
+    console.log("📂 DB:", mongoose.connection.name);
   })
   .catch(err => {
-    console.log("❌ ERROR CONNECT:");
-    console.log(err);
+    console.log("❌ ERROR CONNECT:", err);
   });
 
 // ===== SCHEMA =====
+const User = mongoose.model("User", {
+  uid: String,
+  nama: String
+});
+
+const Barang = mongoose.model("Barang", {
+  kode: String,
+  nama: String
+});
+
 const Log = mongoose.model("Log", {
   uid: String,
   nama: String,
   barang: String,
   mode: String,
   hari: Number,
-  deadline: String
+  deadline: String,
+  waktu: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-// ===== ROOT TEST =====
+// ===== ROOT =====
 app.get("/", (req, res) => {
-  res.send("🚀 API Smart Locker Jalan");
+  res.send("🚀 API SMART LOCKER AKTIF");
+});
+
+// ===== SEED USERS =====
+app.get("/seed-users", async (req, res) => {
+  await User.deleteMany();
+
+  await User.insertMany([
+    { uid: "4112233", nama: "Hafizh" },
+    { uid: "9988776", nama: "Budi" },
+    { uid: "1122334", nama: "Andi" }
+  ]);
+
+  res.send("✅ Users masuk");
+});
+
+// ===== SEED BARANG =====
+app.get("/seed-barang", async (req, res) => {
+  await Barang.deleteMany();
+
+  await Barang.insertMany([
+    { kode: "B001", nama: "Laptop" },
+    { kode: "B002", nama: "Proyektor" },
+    { kode: "B003", nama: "Buku" }
+  ]);
+
+  res.send("✅ Barang masuk");
 });
 
 // ===== GET USERS =====
 app.get("/users", async (req, res) => {
   try {
-    const data = await mongoose.connection.db
-      .collection("users")
-      .find()
-      .toArray();
-
+    const data = await User.find();
     res.json(data);
   } catch (err) {
-    console.log("ERROR GET USERS:", err);
-    res.status(500).send("ERRORrrrr");
+    console.log("ERROR USERS:", err);
+    res.status(500).send("ERROR");
   }
 });
 
 // ===== GET BARANG =====
 app.get("/barang", async (req, res) => {
   try {
-    const data = await mongoose.connection.db
-      .collection("barang")
-      .find()
-      .toArray();
-
+    const data = await Barang.find();
     res.json(data);
   } catch (err) {
-    console.log("ERROR GET BARANG:", err);
+    console.log("ERROR BARANG:", err);
     res.status(500).send("ERROR");
   }
 });
 
-// ===== POST LOG =====
-app.post("/logs", async (req, res) => {
-  console.log("📥 DATA MASUK:", req.body);
-
+// ===== GET LOGS =====
+app.get("/logs", async (req, res) => {
   try {
-    const result = await Log.create(req.body);
-
-    console.log("✅ TERSIMPAN:", result);
-
-    res.send("OK");
+    const data = await Log.find().sort({ waktu: -1 });
+    res.json(data);
   } catch (err) {
-    console.log("❌ ERROR SIMPAN:", err);
-    res.status(500).send("ERROl");
+    console.log("ERROR LOGS:", err);
+    res.status(500).send("ERROR");
   }
 });
 
-// ===== SERVER =====
-app.listen(3000, () => {
-  console.log("🌐 Server jalan di http://localhost:3000");
+// ===== POST LOG (PINJAM / BALIK) =====
+app.post("/logs", async (req, res) => {
+  try {
+    const { uid, nama, barang, mode, hari } = req.body;
+
+    // validasi max 3 hari
+    const durasi = Math.min(hari || 1, 3);
+
+    const now = new Date();
+    const deadline = new Date();
+    deadline.setDate(now.getDate() + durasi);
+
+    const log = await Log.create({
+      uid,
+      nama,
+      barang,
+      mode,
+      hari: durasi,
+      deadline: deadline.toISOString()
+    });
+
+    res.json(log);
+  } catch (err) {
+    console.log("ERROR POST:", err);
+    res.status(500).send("ERROR");
+  }
+});
+
+// ===== PORT (WAJIB BUAT RENDER) =====
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("🌐 Server jalan di port", PORT);
 });
