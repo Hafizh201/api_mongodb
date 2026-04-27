@@ -75,7 +75,7 @@ app.post("/logs", async (req, res) => {
     res.send("OK");
   } catch (err) {
     console.log("❌ ERROR SIMPAN:", err);
-    res.status(500).send("ERROR");
+    res.status(500).send("ERROl");
   }
 });
 
